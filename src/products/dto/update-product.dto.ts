@@ -1,5 +1,6 @@
 import {
   IsEnum,
+  IsInt,
   IsNumber,
   IsOptional,
   IsString,
@@ -19,6 +20,7 @@ export class UpdateProductDto {
   productType?: 'Pant' | 'Shirt' | 'T-shirt' | 'Other';
 
   @IsNumber()
+  @IsInt()
   @Min(0)
   @IsOptional()
   initialStock?: number;
@@ -39,4 +41,8 @@ export class UpdateProductDto {
     message: 'ledgerCode must follow format SL-XXX-X (e.g. SL-123-A)',
   })
   ledgerCode?: string;
+
+  @IsEnum(['qr', 'barcode'])
+  @IsOptional()
+  codeType?: 'qr' | 'barcode';
 }

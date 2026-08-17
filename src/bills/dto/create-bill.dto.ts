@@ -1,5 +1,7 @@
 import {
   IsArray,
+  IsInt,
+  IsMongoId,
   IsNumber,
   IsOptional,
   IsString,
@@ -9,10 +11,14 @@ import {
 import { Type } from 'class-transformer';
 
 export class BillLineItemDto {
+  @IsMongoId()
+  productId: string;
+
   @IsString()
   name: string;
 
   @IsNumber()
+  @IsInt()
   @Min(1)
   quantity: number;
 

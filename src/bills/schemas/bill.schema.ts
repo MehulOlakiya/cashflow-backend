@@ -5,6 +5,9 @@ export type BillDocument = Bill & Document;
 
 @Schema()
 class BillLineItem {
+  @Prop({ type: Types.ObjectId, ref: 'Product', required: true })
+  productId: Types.ObjectId;
+
   @Prop({ required: true })
   name: string;
 

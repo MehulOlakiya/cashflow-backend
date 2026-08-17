@@ -32,8 +32,9 @@ export class ProductsService {
 
     const product = new this.productModel({
       ...dto,
-      productType: dto.productType ?? 'Physical Good',
+      productType: dto.productType ?? 'Other',
       initialStock: dto.initialStock ?? 0,
+      codeType: dto.codeType ?? 'qr',
       userId: new Types.ObjectId(userId),
     });
     return product.save();

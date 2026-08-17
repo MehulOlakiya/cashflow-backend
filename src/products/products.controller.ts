@@ -85,6 +85,7 @@ export class ProductsController {
       purchasePrice: product.purchasePrice,
       sellingPrice: product.sellingPrice,
       ledgerCode: product.ledgerCode,
+      codeType: product.codeType ?? 'qr',
       createdAt: product.createdAt,
       updatedAt: product.updatedAt,
     };

@@ -9,21 +9,113 @@ import { Model, Types } from 'mongoose';
 import { Bill, BillDocument } from './schemas/bill.schema';
 import { CreateBillDto } from './dto/create-bill.dto';
 import { CollectBillPaymentDto } from './dto/collect-bill-payment.dto';
+import { Product, ProductDocument } from '../products/schemas/product.schema';
 
 @Injectable()
 export class BillsService {
   constructor(
     @InjectModel(Bill.name)
     private readonly billModel: Model<BillDocument>,
+    @InjectModel(Product.name)
+    private readonly productModel: Model<ProductDocument>,
   ) {}
 
   async create(userId: string, dto: CreateBillDto): Promise<BillDocument> {
-    const items = dto.items.map((item) => ({
-      name: item.name.trim(),
-      quantity: item.quantity,
-      unitPrice: this.roundCurrency(item.unitPrice),
-      amount: this.roundCurrency(item.quantity * item.unitPrice),
-    }));
+    const duplicateProduct = dto.items.find(
+      (item, index) =>
+        dto.items.findIndex(
+          (candidate) => candidate.productId === item.productId,
+        ) !== index,
+    );
+    if (duplicateProduct) {
+      throw new BadRequestException(
+        'Each product must appear only once in a bill',
+      );
+    }
+
+    const userObjectId = new Types.ObjectId(userId);
+    const deductedStock: Array<{
+      productId: Types.ObjectId;
+      quantity: number;
+    }> = [];
+    const items: Array<{
+      productId: Types.ObjectId;
+      name: string;
+      quantity: number;
+      unitPrice: number;
+      amount: number;
+    }> = [];
+
+    try {
+      for (const item of dto.items) {
+        const productId = new Types.ObjectId(item.productId);
+        const product = await this.productModel
+          .findOneAndUpdate(
+            {
+              _id: productId,
+              userId: userObjectId,
+              initialStock: { $gte: item.quantity },
+            },
+            { $inc: { initialStock: -item.quantity } },
+            { new: true, runValidators: true },
+          )
+          .exec();
+
+        if (!product) {
+          const currentProduct = await this.productModel
+            .findOne({ _id: productId, userId: userObjectId })
+            .select('name initialStock')
+            .lean()
+            .exec();
+          if (!currentProduct) {
+            throw new BadRequestException(
+              `${item.name.trim()} is no longer available`,
+            );
+          }
+          throw new BadRequestException(
+            `${currentProduct.name} has only ${currentProduct.initialStock} unit${currentProduct.initialStock === 1 ? '' : 's'} in stock`,
+          );
+        }
+
+        deductedStock.push({ productId, quantity: item.quantity });
+        const unitPrice = this.roundCurrency(item.unitPrice);
+        items.push({
+          productId,
+          name: product.name,
+          quantity: item.quantity,
+          unitPrice,
+          amount: this.roundCurrency(item.quantity * unitPrice),
+        });
+      }
+
+      const bill = this.buildBill(userObjectId, dto, items);
+      return await bill.save();
+    } catch (error) {
+      await Promise.allSettled(
+        deductedStock.map(({ productId, quantity }) =>
+          this.productModel
+            .updateOne(
+              { _id: productId, userId: userObjectId },
+              { $inc: { initialStock: quantity } },
+            )
+            .exec(),
+        ),
+      );
+      throw error;
+    }
+  }
+
+  private buildBill(
+    userObjectId: Types.ObjectId,
+    dto: CreateBillDto,
+    items: Array<{
+      productId: Types.ObjectId;
+      name: string;
+      quantity: number;
+      unitPrice: number;
+      amount: number;
+    }>,
+  ): BillDocument {
     const subtotal = this.roundCurrency(
       items.reduce((sum, item) => sum + item.amount, 0),
     );
@@ -34,16 +126,14 @@ export class BillsService {
       Math.min(subtotal, Math.max(0, requestedDiscount)),
     );
     const discountPercent =
-      subtotal > 0
-        ? this.roundCurrency((discountAmount / subtotal) * 100)
-        : 0;
+      subtotal > 0 ? this.roundCurrency((discountAmount / subtotal) * 100) : 0;
     const grandTotal = this.roundCurrency(subtotal - discountAmount);
     const amountReceived = this.roundCurrency(
       Math.min(grandTotal, Math.max(0, dto.amountReceived ?? grandTotal)),
     );
     const amountRemaining = this.roundCurrency(grandTotal - amountReceived);
 
-    const bill = new this.billModel({
+    return new this.billModel({
       customerName: dto.customerName ?? '',
       customerMobile: dto.customerMobile ?? '',
       items,
@@ -54,9 +144,8 @@ export class BillsService {
       paymentMethod: dto.paymentMethod ?? 'cash',
       amountReceived,
       amountRemaining,
-      userId: new Types.ObjectId(userId),
+      userId: userObjectId,
     });
-    return bill.save();
   }
 
   async findAll(
@@ -78,10 +167,7 @@ export class BillsService {
       filter.createdAt = dateFilter;
     }
 
-    return this.billModel
-      .find(filter)
-      .sort({ createdAt: -1 })
-      .exec();
+    return this.billModel.find(filter).sort({ createdAt: -1 }).exec();
   }
 
   async findOne(userId: string, id: string): Promise<BillDocument> {

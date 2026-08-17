@@ -29,6 +29,9 @@ export class Product extends Document {
 
   @Prop({ required: true, unique: true })
   ledgerCode: string;
+
+  @Prop({ enum: ['qr', 'barcode'], default: 'qr' })
+  codeType: 'qr' | 'barcode';
 }
 
 export const ProductSchema = SchemaFactory.createForClass(Product);
