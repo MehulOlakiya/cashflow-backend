@@ -6,6 +6,7 @@ import { TransactionsModule } from './transactions/transactions.module';
 import { ProductsModule } from './products/products.module';
 import { BillsModule } from './bills/bills.module';
 import { WhatsAppModule } from './whatsapp/whatsapp.module';
+import { RestModule } from './rest/rest.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { WhatsAppModule } from './whatsapp/whatsapp.module';
     ProductsModule,
     BillsModule,
     WhatsAppModule,
+    RestModule,
   ],
 })
 export class AppModule {}
